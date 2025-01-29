@@ -1,6 +1,3 @@
-How to Implement Secure Authentication (Step by Step)
-This section explains how to implement a simple, secure user authentication system in a Node.js + Express application. Follow the steps below to replicate it.
-
 1. Prerequisites
 Install Node.js & npm:
 Visit nodejs.org to download and install Node.js, which comes with npm (Node Package Manager).
