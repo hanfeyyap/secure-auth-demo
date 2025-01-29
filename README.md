@@ -1,9 +1,14 @@
 1. Prerequisites
+   
 Install Node.js & npm:
+
 Visit nodejs.org to download and install Node.js, which comes with npm (Node Package Manager).
-Create a project folder:
+
+2. Create a project folder:
+
 For example, mkdir secure-auth-demo && cd secure-auth-demo.
-2. Initialize Your Project
+
+3. Initialize Your Project
    
 npm init -y
 
@@ -19,8 +24,8 @@ bcrypt: For secure password hashing
 express-session: For session management
 body-parser: Parses form data from POST requests
 
-4. Create Your server.js
-5. 
+5. Create Your server.js
+
 Below is a minimal example of the server setup. It shows:
 
 How to serve static files (like index.html)
@@ -106,11 +111,14 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(\`Server running on http://localhost:\${PORT}\`);
 });
-5. Place Your index.html in the views Folder
+
+6. Place Your index.html in the views Folder
+7. 
 Create a folder named views in your project root.
 Move this index.html file into that folder.
 With app.use(express.static('views')), Express automatically serves your index.html when someone visits http://localhost:3000.
 
-6. Run Your App
+8. Run Your App
+   
 node server.js
 Open http://localhost:3000 in your browser. You should see the registration and login forms.
