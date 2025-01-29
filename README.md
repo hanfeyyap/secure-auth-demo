@@ -4,10 +4,12 @@ Visit nodejs.org to download and install Node.js, which comes with npm (Node Pac
 Create a project folder:
 For example, mkdir secure-auth-demo && cd secure-auth-demo.
 2. Initialize Your Project
+   
 npm init -y
+
 This generates a package.json with default settings.
 
-3. Install Required Dependencies
+4. Install Required Dependencies
 Run the following in your project folder:
 
 npm install express bcrypt express-session body-parser
