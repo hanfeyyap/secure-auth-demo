@@ -13,11 +13,14 @@ This generates a package.json with default settings.
 Run the following in your project folder:
 
 npm install express bcrypt express-session body-parser
+
 express: Web framework for Node.js
 bcrypt: For secure password hashing
 express-session: For session management
 body-parser: Parses form data from POST requests
+
 4. Create Your server.js
+5. 
 Below is a minimal example of the server setup. It shows:
 
 How to serve static files (like index.html)
