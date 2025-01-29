@@ -113,12 +113,12 @@ app.listen(PORT, () => {
 });
 
 6. Place Your index.html in the views Folder
-7. 
+   
 Create a folder named views in your project root.
 Move this index.html file into that folder.
 With app.use(express.static('views')), Express automatically serves your index.html when someone visits http://localhost:3000.
 
-8. Run Your App
+7. Run Your App
    
 node server.js
 Open http://localhost:3000 in your browser. You should see the registration and login forms.
