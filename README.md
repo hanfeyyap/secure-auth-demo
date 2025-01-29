@@ -1,5 +1,5 @@
-How We Implemented Secure Authentication
-This tutorial explains how you can implement a secure user authentication feature that ensures passwords are never sent or stored in plain text. Below are the core steps:
+
+This README explains how you can implement a secure user authentication feature that ensures passwords are never sent or stored in plain text. Below are the core steps:
 
 1. Use HTTPS
 By configuring an HTTPS server (e.g., with a self-signed certificate in development or a trusted certificate in production), all communication between the client and server is encrypted. This prevents passwords from being read in transit.
