@@ -24,10 +24,15 @@
     #wiki-tutorial h2 {
       margin-top: 0;
     }
-    #wiki-tutorial code {
+    #wiki-tutorial code, #wiki-tutorial pre {
       background: #eef;
       padding: 2px 4px;
-      display: inline-block;
+    }
+    #wiki-tutorial pre {
+      display: block;
+      padding: 10px;
+      overflow-x: auto;
+      white-space: pre-wrap;
     }
   </style>
 </head>
@@ -56,91 +61,374 @@
 
   <!-- SMALL WIKI / TUTORIAL SECTION -->
   <div id="wiki-tutorial">
-    <h2>How We Implemented Secure Authentication</h2>
+    <h2>How to Implement Secure Authentication (with HTTPS)</h2>
     <p>
-      This tutorial explains how you can implement a secure user authentication feature that ensures
-      passwords are <strong>never sent or stored in plain text</strong>. Below are the core steps:
-    </p>
+      This section will guide you through setting up a Node.js + Express application with:
+      <ul>
+        <li><strong>Secure Password Hashing</strong> (via <code>bcrypt</code>)</li>
+        <li><strong>Session-based Authentication</strong> (via <code>express-session</code>)</li>
+        <li><strong>HTTPS/TLS Encryption</strong> (using a self-signed certificate in development)</li>
+      </ul>
 
-    <h3>1. Use HTTPS</h3>
-    <p>
-      By configuring an <strong>HTTPS</strong> server (e.g., with a self-signed certificate in development
-      or a trusted certificate in production), all communication between the client and server is
-      <strong>encrypted</strong>. This prevents passwords from being read in transit.
-    </p>
+    <h3>1. Prerequisites</h3>
+    <ol>
+      <li>
+        <strong>Install Node.js & npm:</strong> 
+        <br>
+        Visit <a href="https://nodejs.org/en/download" target="_blank">nodejs.org</a> to download
+        and install Node.js, which comes with npm (Node Package Manager).
+      </li>
+      <li>
+        <strong>Create a project folder:</strong> 
+        <br>
+        For example, <code>mkdir secure-auth-demo &amp;&amp; cd secure-auth-demo</code>.
+      </li>
+    </ol>
 
-    <h3>2. Hash Passwords with Bcrypt (or Argon2)</h3>
-    <p>
-      In our <code>server.js</code>, we use a library like <code>bcrypt</code> to
-      securely hash (and salt) the user's password before saving it. For example:
-    </p>
-    <pre><code>
-// Example registration route
-app.post('/register', async (req, res) => {
-  const { username, password } = req.body;
-  
-  // Generate a salted hash
-  const passwordHash = await bcrypt.hash(password, 10);
-  
-  // Store the hashed password in our "database"
-  users.push({ username, passwordHash });
-  res.send('User registered successfully!');
-});
-    </code></pre>
-    <p>
-      The important point is that you <strong>never</strong> store or log the raw password; you only keep
-      the hashed version. If an attacker somehow accesses the database, they won’t directly get
-      the user’s actual password.
-    </p>
+    <h3>2. Initialize Your Project</h3>
+    <pre><code>npm init -y
+</code></pre>
+    <p>This generates a <code>package.json</code> with default settings.</p>
 
-    <h3>3. Verify Passwords on Login</h3>
-    <p>
-      When a user logs in, you compare their typed-in password (hashed again behind the scenes) with
-      the stored hash:
-    </p>
-    <pre><code>
-// Example login route
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  const user = users.find(u => u.username === username);
-  if (!user) return res.send('Invalid username or password');
-
-  // Compare typed-in password with stored hash
-  const isMatch = await bcrypt.compare(password, user.passwordHash);
-  if (!isMatch) return res.send('Invalid username or password');
-
-  // If successful, create a session or token
-  req.session.user = { username };
-  res.send(`Welcome, ${username}!`);
-});
-    </code></pre>
-
-    <h3>4. Session Management</h3>
-    <p>
-      We used <code>express-session</code> to create and manage user sessions, storing a session ID
-      in a cookie. This means the user doesn’t have to re-enter their password for each request.
-      The session data is stored server-side, <strong>never</strong> exposing the raw password.
-    </p>
-
-    <h3>5. Summary of Best Practices</h3>
+    <h3>3. Install Required Dependencies</h3>
+    <p>Run the following in your project folder:</p>
+    <pre><code>npm install express bcrypt express-session body-parser
+</code></pre>
     <ul>
-      <li>Use <strong>HTTPS</strong> to encrypt data in transit.</li>
-      <li>Use a proper hashing function (<strong>bcrypt</strong>, <strong>argon2</strong>) with salting.</li>
-      <li>Store only <strong>hashed</strong> passwords in your database—never plaintext.</li>
-      <li>Implement <strong>sessions or tokens</strong> so users don’t need to keep sending credentials.</li>
-      <li>Keep secrets (session secrets, DB passwords) in environment variables.</li>
-      <li>Consider <strong>rate limiting</strong> on login endpoints to prevent brute force attacks.</li>
+      <li><strong>express</strong>: Web framework for Node.js</li>
+      <li><strong>bcrypt</strong>: For secure password hashing</li>
+      <li><strong>express-session</strong>: For session management</li>
+      <li><strong>body-parser</strong>: Parses form data from POST requests</li>
     </ul>
 
+    <h3>4. Generate Self-Signed Certificate (for HTTPS in Development)</h3>
+    <p>If you want to enable HTTPS locally, run the following command in your project folder:</p>
+    <pre><code>openssl req -x509 -newkey rsa:4096 -nodes -keyout key.pem -out cert.pem -days 365
+</code></pre>
     <p>
-      By following these steps, another developer can easily replicate this setup. They would just need:
-      <br>- A Node.js server (using Express)
-      <br>- The <code>bcrypt</code> (or argon2) library
-      <br>- A session management library (e.g. <code>express-session</code>)
-      <br>- A client-side form for <strong>Register</strong> and <strong>Login</strong>.
+      This will create two files in your current directory:
+      <code>key.pem</code> and <code>cert.pem</code>. 
+      These are used for TLS encryption. 
+      (Your browser will warn you about a self-signed certificate, but it’s fine for testing.)
+    </p>
+    
+
+    <h3>4. Create Your <code>server.js</code> with HTTPS & Secure Auth</h3>
+    <p>Here’s a sample <code>server.js</code> that uses <strong>HTTPS</strong>, <strong>bcrypt</strong> (for hashing), and <strong>express-session</strong> (for session management):</p>
+
+    <pre><code>const express = require('express');
+const https = require('https');
+const fs = require('fs');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
+
+// 1) Create the Express app
+const app = express();
+
+// 2) Middleware to parse form data
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// 3) Session configuration
+app.use(session({
+  secret: 'YourSessionSecretKey',
+  resave: false,
+  saveUninitialized: false,
+}));
+
+// 4) In-memory user store (for demo)
+let users = []; 
+// Example user object: { username: 'testuser', passwordHash: '...' }
+
+// 5) Serve static files from "views" (like index.html)
+app.use(express.static('views'));
+
+// 6) Registration route
+app.post('/register', async (req, res) => {
+  const { username, password } = req.body;
+
+  // Hash the password
+  const saltRounds = 10;
+  const passwordHash = await bcrypt.hash(password, saltRounds);
+
+  // Save user with hashed password
+  users.push({ username, passwordHash });
+  res.send('User registered successfully! &lt;a href="/"&gt;Go back&lt;/a&gt;');
+});
+
+// 7) Login route
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+
+  // Find user by username
+  const user = users.find(u => u.username === username);
+  if (!user) {
+    return res.send('Invalid username or password. &lt;a href="/"&gt;Try again&lt;/a&gt;');
+  }
+
+  // Compare provided password with stored hash
+  const isMatch = await bcrypt.compare(password, user.passwordHash);
+  if (!isMatch) {
+    return res.send('Invalid username or password. &lt;a href="/"&gt;Try again&lt;/a&gt;');
+  }
+
+  // If match, store user info in session
+  req.session.user = { username };
+  res.send(\`Welcome, \${username}! &lt;a href="/protected"&gt;Go to protected page&lt;/a&gt;\`);
+});
+
+// 8) Protected route
+app.get('/protected', (req, res) => {
+  if (!req.session.user) {
+    return res.send('You must be logged in to view this page. &lt;a href="/"&gt;Home&lt;/a&gt;');
+  }
+  res.send(\`Hello, \${req.session.user.username}! &lt;a href="/logout"&gt;Logout&lt;/a&gt;\`);
+});
+
+// 9) Logout route
+app.get('/logout', (req, res) => {
+  req.session.destroy(err => {
+    if (err) {
+      return res.send('Error logging out. &lt;a href="/"&gt;Home&lt;/a&gt;');
+    }
+    res.clearCookie('connect.sid');
+    res.send('You have been logged out. &lt;a href="/"&gt;Home&lt;/a&gt;');
+  });
+});
+
+// 10) Read SSL certificate & key for HTTPS
+const options = {
+  key: fs.readFileSync('key.pem'),
+  cert: fs.readFileSync('cert.pem')
+};
+
+// 11) Start HTTPS server on port 3000
+const PORT = process.env.PORT || 3000;
+https.createServer(options, app).listen(PORT, () => {
+  console.log(\`Server running on https://localhost:\${PORT}\`);
+});
+</code></pre>
+
+    <h3>5. Folder Structure</h3>
+    <p>
+      A typical layout:
+    </p>
+    <pre><code>secure-auth-demo/
+├── key.pem
+├── cert.pem
+├── server.js
+├── package.json
+├── package-lock.json
+└── views
+    └── index.html
+</code></pre>
+
+    <p>
+      Make sure <code>index.html</code> (the file you're reading now) is inside the
+      <code>views</code> folder, so <code>express.static('views')</code> can serve it.
     </p>
 
-    <p><em>This mini wiki/tutorial should help anyone integrate secure authentication into their own project.</em></p>
+    <h3>6. Running the App</h3>
+    <p>In your terminal, from the project root:</p>
+    <pre><code>node server.js
+</code></pre>
+    <p>
+      Open <code>https://localhost:3000</code> in your browser. You’ll likely see a warning about the certificate 
+      (because it’s self-signed). Click “Advanced” → “Proceed” to continue.
+    </p>
+
+    <h3>7. Testing Registration & Login</h3>
+    <ol>
+      <li>
+        <strong>Register:</strong>  
+        Enter a username/password on the <em>Register</em> form. Check your server logs if you want to see the stored hashed password (for demonstration).
+      </li>
+      <li>
+        <strong>Login:</strong>  
+        Enter the same username/password. If correct, you’ll see a welcome message with a link to the protected page.
+      </li>
+      <li>
+        <strong>Protected Route:</strong>  
+        After logging in, you can visit <code>/protected</code>. If you log out or clear cookies, you’ll be denied access until you log in again.
+      </li>
+    </ol>
+
+    <h3>8. Key Security Concepts</h3>
+    <ul>
+      <li>
+        <strong>HTTPS (TLS/SSL):</strong>  
+        Encrypts all traffic between client and server, preventing eavesdropping of passwords or session IDs.
+      </li>
+      <li>
+        <strong>Hashing &amp; Salting Passwords:</strong>  
+        We use <code>bcrypt.hash()</code> to store only the scrambled hash, never the plaintext password.
+      </li>
+      <li>
+        <strong>Session Management:</strong>  
+        <code>express-session</code> assigns a session ID cookie to the browser, storing session data server-side. The user doesn’t need to re-send their password on each request.
+      </li>
+    </ul>
+
+    <h3>Summary</h3>
+    <ul>
+      <li>
+        <strong>HTTPS (Optional, but recommended):</strong>  
+        Use a real certificate or a self-signed certificate in development to ensure
+        traffic is encrypted.
+      </li>
+      <li>
+        <strong>Hashing & Salting:</strong>  
+        <code>bcrypt.hash(password, saltRounds)</code> automatically salts passwords
+        before hashing. When a user logs in, <code>bcrypt.compare()</code> checks the password
+        against the hash.
+      </li>
+      <li>
+        <strong>Sessions:</strong>  
+        <code>express-session</code> stores a session ID in a cookie, meaning the user
+        doesn’t have to send their password on every request.
+      </li>
+    </ul>
+
+    <h3>Detailed Explanation</h3>
+
+    <h4>Imports</h4>
+    <pre><code>const express = require('express');
+    const session = require('express-session');
+    const bcrypt = require('bcrypt');
+    const bodyParser = require('body-parser');
+    
+    // New for HTTPS:
+    const https = require('https');
+    const fs = require('fs');
+    </code></pre>
+    <p>
+      - <strong>express:</strong> A popular Node.js framework for building web applications.<br>
+      - <strong>express-session:</strong> Helps manage user sessions (logins) by storing session data server-side.<br>
+      - <strong>bcrypt:</strong> A library that securely hashes passwords with built-in salting.<br>
+      - <strong>body-parser:</strong> Parses form data (<code>req.body</code>) from POST requests.<br>
+      - <strong>https, fs:</strong> Required for reading certificate/key files from disk and creating an HTTPS server.
+    </p>
+    
+    <h4>App Initialization</h4>
+    <pre><code>const app = express();
+    </code></pre>
+    <p>
+      - Creates an Express application instance.
+    </p>
+    
+    <h4>Body Parsing Middleware</h4>
+    <pre><code>app.use(bodyParser.urlencoded({ extended: true }));
+    </code></pre>
+    <p>
+      - Allows Express to read form data (<code>application/x-www-form-urlencoded</code>) sent via POST.<br>
+      - <code>{ extended: true }</code> means it can parse nested/complex objects if needed.
+    </p>
+    
+    <h4>Session Configuration</h4>
+    <pre><code>app.use(session({
+      secret: 'YourSessionSecretKey',
+      resave: false,
+      saveUninitialized: false
+    }));
+    </code></pre>
+    <p>
+      - This sets up session handling.<br>
+      - <strong>secret:</strong> A string used to sign the session ID cookie. In production, store this in an environment variable.<br>
+      - <strong>resave:</strong> If <code>false</code>, the session is only re-saved if modified.<br>
+      - <strong>saveUninitialized:</strong> If <code>false</code>, sessions won’t be saved for users who haven’t “used” them yet (e.g., not logged in).
+    </p>
+    
+    <h4>In-Memory User Store</h4>
+    <pre><code>let users = [];
+    </code></pre>
+    <p>
+      - This array holds user records in memory (just for demonstration).<br>
+      - Each user looks like <code>{ username: 'example', passwordHash: '...' }</code>.<br>
+      - In a real app, you’d use a database (e.g., MongoDB, PostgreSQL).
+    </p>
+    
+    <h4>Serving Static Files</h4>
+    <pre><code>app.use(express.static('views'));
+    </code></pre>
+    <p>
+      - Tells Express to serve any static files in the <code>views</code> folder, including your
+        <code>index.html</code>.  
+      - When you visit <code>http://localhost:3000</code> (or <code>https://</code> once HTTPS is set up), Express will serve that page by default.
+    </p>
+    
+    <h4>Registration Route</h4>
+    <pre><code>app.post('/register', async (req, res) => {
+      const { username, password } = req.body;
+    
+      const saltRounds = 10;
+      const passwordHash = await bcrypt.hash(password, saltRounds);
+    
+      users.push({ username, passwordHash });
+      res.send('User registered successfully!');
+    });
+    </code></pre>
+    <p>
+      - <strong>Method</strong>: POST to <code>/register</code>.<br>
+      - <strong>Destructure</strong> <code>username</code> and <code>password</code> from <code>req.body</code>.<br>
+      - <strong>bcrypt.hash</strong>: Converts the plaintext password into a hashed string with salt (10 rounds here).<br>
+      - Finally, we store the new user object <code>{ username, passwordHash }</code> in <code>users</code>. Notice we <em>don’t</em> keep the plaintext password.
+    </p>
+    
+    <h4>Login Route</h4>
+    <pre><code>app.post('/login', async (req, res) => {
+      const { username, password } = req.body;
+    
+      const user = users.find(u => u.username === username);
+      if (!user) {
+        return res.send('Invalid username or password.');
+      }
+    
+      const isMatch = await bcrypt.compare(password, user.passwordHash);
+      if (!isMatch) {
+        return res.send('Invalid username or password.');
+      }
+    
+      req.session.user = { username };
+      res.send(\`Welcome, \${username}! &lt;a href="/protected"&gt;Go to protected page&lt;/a&gt;\`);
+    });
+    </code></pre>
+    <p>
+      - <strong>Find the user</strong> by <code>username</code> in the <code>users</code> array.<br>
+      - <strong>Compare hashed password</strong> with <code>bcrypt.compare(password, user.passwordHash)</code>.<br>
+      - <strong>Create session</strong>: If matches, we set <code>req.session.user</code> to <code>{ username }</code>, indicating the user is logged in.<br>
+      - Respond with a welcome message and link to a protected page.
+    </p>
+    
+    <h4>Protected Route</h4>
+    <pre><code>app.get('/protected', (req, res) => {
+      if (!req.session.user) {
+        return res.send('You must be logged in to access this page.');
+      }
+      res.send(\`Hello, \${req.session.user.username}! &lt;a href="/logout"&gt;Logout&lt;/a&gt;\`);
+    });
+    </code></pre>
+    <p>
+      - Checks if <code>req.session.user</code> exists.<br>
+      - If not, denies access; if yes, displays a greeting and logout link.
+    </p>
+    
+    <h4>Logout Route</h4>
+    <pre><code>app.get('/logout', (req, res) => {
+      req.session.destroy(err => {
+        if (err) {
+          return res.send('Error logging out.');
+        }
+        res.clearCookie('connect.sid');
+        res.send('You have been logged out. &lt;a href="/"&gt;Back to home&lt;/a&gt;');
+      });
+    });
+    </code></pre>
+    <p>
+      - <code>req.session.destroy()</code> invalidates the session on the server.<br>
+      - <code>res.clearCookie('connect.sid')</code> removes the session ID cookie in the browser.<br>
+      - The user is now fully logged out.
+    </p>
+    
   </div>
 </body>
 </html>
