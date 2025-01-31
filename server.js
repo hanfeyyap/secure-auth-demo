@@ -1,87 +1,102 @@
+/************************************************
+ * server.js - HTTPS with Secure Authentication
+ ************************************************/
 const express = require('express');
+const https = require('https');
+const fs = require('fs');
 const session = require('express-session');
-const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 
-
-// Create an Express app
+// 1. Create the Express app
 const app = express();
+
+// 2. Middleware to parse form data
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// Configure sessions
+// 3. Session configuration
 app.use(session({
-  secret: 'YourSessionSecretKeyGoesHere',
+  secret: 'YourSessionSecretKey',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: false
 }));
 
-// Fake user "database"
+// 4. Simple in-memory "database" for users
 let users = []; 
-// Each user object: { username: 'X', passwordHash: '...' }
+// Each user object will look like: { username: 'abc', passwordHash: '...' }
 
-// Serve static files from the "views" folder
+// 5. Serve static files (like index.html) from the "views" folder
 app.use(express.static('views'));
 
-// 1. Registration Route
+/************************************************
+ *                Routes
+ ************************************************/
+// 6. Registration route
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
-
-  // Check if username is taken
-  if (users.some(u => u.username === username)) {
-    return res.send('Username already taken! <a href="/">Go back</a>');
-  }
-
-  // Hash password
+  // Hash the password
   const saltRounds = 10;
   const passwordHash = await bcrypt.hash(password, saltRounds);
 
-  // Store user with hashed password
+  // Save user with hashed password
   users.push({ username, passwordHash });
   
-  res.send('User registered successfully. <a href="/">Go back</a>');
+  res.send('User registered successfully! <a href="/">Go back</a>');
 });
 
-// 2. Login Route
+// 7. Login route
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   
+  // Find user by username
   const user = users.find(u => u.username === username);
   if (!user) {
-    return res.send('Invalid username or password. <a href="/">Go back</a>');
+    return res.send('Invalid username or password. <a href="/">Try again</a>');
   }
 
-  // Compare password with stored hash
+  // Compare provided password with stored hash
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    return res.send('Invalid username or password. <a href="/">Go back</a>');
+    return res.send('Invalid username or password. <a href="/">Try again</a>');
   }
 
-  // If success, store user in session
+  // If match, store user data in session
   req.session.user = { username };
   res.send(`Welcome, ${username}! <a href="/protected">Go to protected page</a>`);
 });
 
-// 3. Protected Route
+// 8. Protected route
 app.get('/protected', (req, res) => {
   if (!req.session.user) {
-    return res.send('You are not logged in! <a href="/">Go to home</a>');
+    return res.send('You must be logged in to see this page. <a href="/">Home</a>');
   }
-  res.send(`You are logged in as ${req.session.user.username}. <a href="/logout">Logout</a>`);
+  res.send(`Hello, ${req.session.user.username}! <a href="/logout">Logout</a>`);
 });
 
-// 4. Logout Route
+// 9. Logout route
 app.get('/logout', (req, res) => {
   req.session.destroy(err => {
     if (err) {
-      return res.send('Error logging out');
+      return res.send('Error logging out. <a href="/">Home</a>');
     }
     res.clearCookie('connect.sid');
-    res.send('You have logged out. <a href="/">Go to home</a>');
+    res.send('You have been logged out. <a href="/">Home</a>');
   });
 });
 
-// Start the server
+/************************************************
+ *           HTTPS Server Configuration
+ ************************************************/
+// 10. Read SSL certificate and key
+const options = {
+  key: fs.readFileSync('key.pem'),
+  cert: fs.readFileSync('cert.pem')
+};
+
+// 11. Define the server port
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+
+// 12. Create an HTTPS server
+https.createServer(options, app).listen(PORT, () => {
   console.log(`Server running on https://localhost:${PORT}`);
 });
