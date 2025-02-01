@@ -164,6 +164,7 @@ const PORT = process.env.PORT || 3000;
 https.createServer(options, app).listen(PORT, () => {
   console.log(\`Server running on https://localhost:\${PORT}\`);
 });
+
 6. Folder Structure
 A typical layout:
 
