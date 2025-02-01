@@ -68,7 +68,10 @@
         <li><strong>Secure Password Hashing</strong> (via <code>bcrypt</code>)</li>
         <li><strong>Session-based Authentication</strong> (via <code>express-session</code>)</li>
         <li><strong>HTTPS/TLS Encryption</strong> (using a self-signed certificate in development)</li>
+        <li><strong>Rate Limiting for Login Attempts</strong> (via <code>express-rate-limit</code>)</li>
+        <li><strong>Password Strength Checking</strong> (via <code>zxcvbn</code>)</li>
       </ul>
+    </p>
 
     <h3>1. Prerequisites</h3>
     <ol>
@@ -92,13 +95,15 @@
 
     <h3>3. Install Required Dependencies</h3>
     <p>Run the following in your project folder:</p>
-    <pre><code>npm install express bcrypt express-session body-parser
+    <pre><code>npm install express bcrypt express-session body-parser express-rate-limit zxcvbn
 </code></pre>
     <ul>
       <li><strong>express</strong>: Web framework for Node.js</li>
       <li><strong>bcrypt</strong>: For secure password hashing</li>
       <li><strong>express-session</strong>: For session management</li>
       <li><strong>body-parser</strong>: Parses form data from POST requests</li>
+      <li><strong>express-rate-limit</strong>: For rate limiting login attempts</li>
+      <li><strong>zxcvbn</strong>: For checking password strength</li>
     </ul>
 
     <h3>4. Generate Self-Signed Certificate (for HTTPS in Development)</h3>
@@ -111,10 +116,9 @@
       These are used for TLS encryption. 
       (Your browser will warn you about a self-signed certificate, but it’s fine for testing.)
     </p>
-    
 
-    <h3>4. Create Your <code>server.js</code> with HTTPS & Secure Auth</h3>
-    <p>Here’s a sample <code>server.js</code> that uses <strong>HTTPS</strong>, <strong>bcrypt</strong> (for hashing), and <strong>express-session</strong> (for session management):</p>
+    <h3>5. Create Your <code>server.js</code> with HTTPS & Secure Auth</h3>
+    <p>Here’s a sample <code>server.js</code> that uses <strong>HTTPS</strong>, <strong>bcrypt</strong> (for hashing), <strong>express-session</strong> (for session management), <strong>express-rate-limit</strong> (for rate limiting), and <strong>zxcvbn</strong> (for password strength checking):</p>
 
     <pre><code>const express = require('express');
 const https = require('https');
@@ -122,30 +126,62 @@ const fs = require('fs');
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
+const rateLimit = require('express-rate-limit');
+const zxcvbn = require('zxcvbn');
 
-// 1) Create the Express app
+// 1. Create the Express app
 const app = express();
 
-// 2) Middleware to parse form data
+// 2. Middleware to parse form data
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 3) Session configuration
+// 3. Session configuration
 app.use(session({
   secret: 'YourSessionSecretKey',
   resave: false,
   saveUninitialized: false,
 }));
 
-// 4) In-memory user store (for demo)
+// 4. In-memory user store (for demo)
 let users = []; 
 // Example user object: { username: 'testuser', passwordHash: '...' }
 
-// 5) Serve static files from "views" (like index.html)
+/************************************************
+ *                Rate Limiting
+ ************************************************/
+const maxAttempts = 5;
+const attempts = {};
+
+// Rate limiter for login attempts
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: maxAttempts, // Limit each IP to 5 login requests per `window` (here, per 15 minutes)
+  handler: (req, res) => {
+    const remainingTime = Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000 / 60);
+    res.send(\`Too many login attempts from this IP. Please try again after \${remainingTime} minutes.\`);
+  }
+});
+
+/************************************************
+ *                Routes
+ ************************************************/
+// Serve static files from "views" (like index.html)
 app.use(express.static('views'));
 
-// 6) Registration route
+// Route for the root URL
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/views/index.html');
+});
+// Registration route
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
+
+  // Check password strength
+  const result = zxcvbn(password);
+  if (result.score < 3) { // Score ranges from 0 to 4; 3 is a reasonable threshold
+    const feedback = result.feedback.suggestions.join(' ');
+    return res.send(\`Password is too weak. Please choose a stronger password. Tips: \${feedback}\`);
+  }
 
   // Hash the password
   const saltRounds = 10;
@@ -153,63 +189,77 @@ app.post('/register', async (req, res) => {
 
   // Save user with hashed password
   users.push({ username, passwordHash });
-  res.send('User registered successfully! &lt;a href="/"&gt;Go back&lt;/a&gt;');
+  res.send('User registered successfully! <a href="/">Go back</a>');
 });
 
-// 7) Login route
-app.post('/login', async (req, res) => {
+// Login route with rate limiter
+app.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
+  const ip = req.ip;
+
+  // Initialize attempts for the IP if not already set
+  if (!attempts[ip]) {
+    attempts[ip] = 0;
+  }
 
   // Find user by username
   const user = users.find(u => u.username === username);
   if (!user) {
-    return res.send('Invalid username or password. &lt;a href="/"&gt;Try again&lt;/a&gt;');
+    attempts[ip]++;
+    const remainingAttempts = maxAttempts - attempts[ip];
+    return res.send(\`Invalid username or password. You have \${remainingAttempts} attempts left. <a href="/">Try again</a>\`);
   }
 
   // Compare provided password with stored hash
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    return res.send('Invalid username or password. &lt;a href="/"&gt;Try again&lt;/a&gt;');
+    attempts[ip]++;
+    const remainingAttempts = maxAttempts - attempts[ip];
+    return res.send(\`Invalid username or password. You have \${remainingAttempts} attempts left. <a href="/">Try again</a>\`);
   }
 
-  // If match, store user info in session
+  // If match, store user data in session
   req.session.user = { username };
-  res.send(\`Welcome, \${username}! &lt;a href="/protected"&gt;Go to protected page&lt;/a&gt;\`);
+  attempts[ip] = 0; // Reset login attempts on successful login
+  res.send(\`Welcome, \${username}! <a href="/protected">Go to protected page</a>\`);
 });
 
-// 8) Protected route
+// Protected route
 app.get('/protected', (req, res) => {
   if (!req.session.user) {
-    return res.send('You must be logged in to view this page. &lt;a href="/"&gt;Home&lt;/a&gt;');
+    return res.send('You must be logged in to see this page. <a href="/">Home</a>');
   }
-  res.send(\`Hello, \${req.session.user.username}! &lt;a href="/logout"&gt;Logout&lt;/a&gt;\`);
+  res.send(\`Hello, \${req.session.user.username}! <a href="/logout">Logout</a>\`);
 });
 
-// 9) Logout route
+// Logout route
 app.get('/logout', (req, res) => {
   req.session.destroy(err => {
     if (err) {
-      return res.send('Error logging out. &lt;a href="/"&gt;Home&lt;/a&gt;');
+      return res.send('Error logging out. <a href="/">Home</a>');
     }
     res.clearCookie('connect.sid');
-    res.send('You have been logged out. &lt;a href="/"&gt;Home&lt;/a&gt;');
+    res.send('You have been logged out. <a href="/">Home</a>');
   });
 });
 
-// 10) Read SSL certificate & key for HTTPS
+/************************************************
+ *           HTTPS Server Configuration
+ ************************************************/
+// Read SSL certificate & key for HTTPS
 const options = {
   key: fs.readFileSync('key.pem'),
   cert: fs.readFileSync('cert.pem')
 };
 
-// 11) Start HTTPS server on port 3000
+// Start HTTPS server on port 3000
 const PORT = process.env.PORT || 3000;
 https.createServer(options, app).listen(PORT, () => {
   console.log(\`Server running on https://localhost:\${PORT}\`);
 });
 </code></pre>
 
-    <h3>5. Folder Structure</h3>
+    <h3>6. Folder Structure</h3>
     <p>
       A typical layout:
     </p>
@@ -228,7 +278,7 @@ https.createServer(options, app).listen(PORT, () => {
       <code>views</code> folder, so <code>express.static('views')</code> can serve it.
     </p>
 
-    <h3>6. Running the App</h3>
+    <h3>7. Running the App</h3>
     <p>In your terminal, from the project root:</p>
     <pre><code>node server.js
 </code></pre>
@@ -237,7 +287,7 @@ https.createServer(options, app).listen(PORT, () => {
       (because it’s self-signed). Click “Advanced” → “Proceed” to continue.
     </p>
 
-    <h3>7. Testing Registration & Login</h3>
+    <h3>8. Testing Registration & Login</h3>
     <ol>
       <li>
         <strong>Register:</strong>  
@@ -253,7 +303,51 @@ https.createServer(options, app).listen(PORT, () => {
       </li>
     </ol>
 
-    <h3>8. Key Security Concepts</h3>
+    <h3>6. Folder Structure</h3>
+    <p>
+      A typical layout:
+    </p>
+    <pre><code>secure-auth-demo/
+├── key.pem
+├── cert.pem
+├── server.js
+├── package.json
+├── package-lock.json
+└── views
+    └── index.html
+</code></pre>
+
+    <p>
+      Make sure <code>index.html</code> (the file you're reading now) is inside the
+      <code>views</code> folder, so <code>express.static('views')</code> can serve it.
+    </p>
+
+    <h3>9. Running the App</h3>
+    <p>In your terminal, from the project root:</p>
+    <pre><code>node server.js
+</code></pre>
+    <p>
+      Open <code>https://localhost:3000</code> in your browser. You’ll likely see a warning about the certificate 
+      (because it’s self-signed). Click “Advanced” → “Proceed” to continue.
+    </p>
+
+    <h3>10. Testing Registration & Login</h3>
+    <ol>
+      <li>
+        <strong>Register:</strong>  
+        Enter a username/password on the <em>Register</em> form. Check your server logs if you want to see the stored hashed password (for demonstration).
+      </li>
+      <li>
+        <strong>Login:</strong>  
+        Enter the same username/password. If correct, you’ll see a welcome message with a link to the protected page.
+      </li>
+      <li>
+        <strong>Protected Route:</strong>  
+        After logging in, you can visit <code>/protected</code>. If you log out or clear cookies, you’ll be denied access until you log in again.
+      </li>
+    </ol>
+
+    <h3>11. Key Security Concepts</h3>
     <ul>
       <li>
         <strong>HTTPS (TLS/SSL):</strong>  
@@ -266,6 +360,14 @@ https.createServer(options, app).listen(PORT, () => {
       <li>
         <strong>Session Management:</strong>  
         <code>express-session</code> assigns a session ID cookie to the browser, storing session data server-side. The user doesn’t need to re-send their password on each request.
+      </li>
+      <li>
+        <strong>Rate Limiting:</strong>  
+        <code>express-rate-limit</code> restricts the number of login attempts from a single IP address to prevent brute force attacks.
+      </li>
+      <li>
+        <strong>Password Strength Checking:</strong>  
+        <code>zxcvbn</code> evaluates the strength of passwords and provides feedback on how to create stronger passwords.
       </li>
     </ul>
 
@@ -287,6 +389,14 @@ https.createServer(options, app).listen(PORT, () => {
         <code>express-session</code> stores a session ID in a cookie, meaning the user
         doesn’t have to send their password on every request.
       </li>
+      <li>
+        <strong>Rate Limiting:</strong>  
+        <code>express-rate-limit</code> limits login attempts to protect against brute force attacks.
+      </li>
+      <li>
+        <strong>Password Strength Checking:</strong>  
+        <code>zxcvbn</code> helps users create strong, secure passwords by evaluating their strength and providing feedback.
+      </li>
     </ul>
 
     <h3>Detailed Explanation</h3>
@@ -296,6 +406,8 @@ https.createServer(options, app).listen(PORT, () => {
     const session = require('express-session');
     const bcrypt = require('bcrypt');
     const bodyParser = require('body-parser');
+    const rateLimit = require('express-rate-limit');
+    const zxcvbn = require('zxcvbn');
     
     // New for HTTPS:
     const https = require('https');
@@ -306,6 +418,8 @@ https.createServer(options, app).listen(PORT, () => {
       - <strong>express-session:</strong> Helps manage user sessions (logins) by storing session data server-side.<br>
       - <strong>bcrypt:</strong> A library that securely hashes passwords with built-in salting.<br>
       - <strong>body-parser:</strong> Parses form data (<code>req.body</code>) from POST requests.<br>
+      - <strong>rateLimit:</strong> A middleware to limit repeated requests to public APIs and/or endpoints.<br>
+      - <strong>zxcvbn:</strong> A library that evaluates password strength and provides feedback.<br>
       - <strong>https, fs:</strong> Required for reading certificate/key files from disk and creating an HTTPS server.
     </p>
     
