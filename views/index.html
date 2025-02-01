@@ -303,25 +303,6 @@ https.createServer(options, app).listen(PORT, () => {
       </li>
     </ol>
 
-    <h3>6. Folder Structure</h3>
-    <p>
-      A typical layout:
-    </p>
-    <pre><code>secure-auth-demo/
-├── key.pem
-├── cert.pem
-├── server.js
-├── package.json
-├── package-lock.json
-└── views
-    └── index.html
-</code></pre>
-
-    <p>
-      Make sure <code>index.html</code> (the file you're reading now) is inside the
-      <code>views</code> folder, so <code>express.static('views')</code> can serve it.
-    </p>
-
     <h3>9. Running the App</h3>
     <p>In your terminal, from the project root:</p>
     <pre><code>node server.js
