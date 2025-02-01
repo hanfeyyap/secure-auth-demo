@@ -17,6 +17,7 @@ express-session: For session management
 body-parser: Parses form data from POST requests
 express-rate-limit: For rate limiting login attempts
 zxcvbn: For checking password strength
+
 4. Generate Self-Signed Certificate (for HTTPS in Development)
 If you want to enable HTTPS locally, run the following command in your project folder:
 
